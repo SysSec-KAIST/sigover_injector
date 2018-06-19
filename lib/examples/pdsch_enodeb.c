@@ -44,6 +44,7 @@
 
 #ifndef DISABLE_RF
 #include "srslte/phy/rf/rf.h"
+#include "srslte/phy/rf/rf_utils.h"
 #include "srslte/phy/common/phy_common.h"
 srslte_rf_t rf;
 #else
@@ -56,6 +57,13 @@ char *output_file_name = NULL;
 #define RIGHT_KEY 67
 #define UP_KEY    65
 #define DOWN_KEY  66
+
+cell_search_cfg_t cell_detect_config = {
+  SRSLTE_DEFAULT_MAX_FRAMES_PBCH,
+  SRSLTE_DEFAULT_MAX_FRAMES_PSS,
+  SRSLTE_DEFAULT_NOF_VALID_PSS_FRAMES,
+  0
+};
 
 srslte_cell_t cell = {
   25,               // nof_prb
@@ -683,6 +691,10 @@ void *net_thread_fnc(void *arg) {
 
 
 int main(int argc, char **argv) {
+  int decimate = 1;
+  srslte_ue_mib_t ue_mib;
+  int sfn_offset;
+  float cfo = 0;
   int nf=0, sf_idx=0, N_id_2=0;
   cf_t pss_signal[SRSLTE_PSS_LEN];
   float sss_signal0[SRSLTE_SSS_LEN]; // for subframe 0
@@ -780,8 +792,62 @@ int main(int argc, char **argv) {
       exit(-1);
     }
     printf("Set TX gain: %.1f dB\n", srslte_rf_set_tx_gain(&rf, rf_gain));
-    printf("Set TX freq: %.2f MHz\n",
-        srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
+    printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
+    // ******************** MODIFIED START *************************************
+    printf("Set RX freq: %.2f MHz\n", srslte_rf_set_rx_freq(&rf, rf_freq) / 1000000);
+    srslte_rf_set_rx_gain(&rf, 40);
+    bool locked = srslte_rf_rx_wait_lo_locked(&rf);
+    printf("%s\n",locked ? "locked" : "Not locked");
+
+    uint32_t ntrial = 0;
+    int ret = 0;
+    srslte_cell_t cell;
+    do {
+      //ret = rf_search_and_decode_mib(&rf, prog_args.rf_nof_rx_ant, &cell_detect_config, prog_args.force_N_id_2, &cell, &cfo);
+      ret = rf_search_and_decode_mib(&rf, 1, &cell_detect_config, -1, &cell, &cfo);
+      if (ret < 0) {
+        fprintf(stderr, "Error searching for cell\n");
+        exit(-1);
+      } else if (ret == 0 && !go_exit) {
+        printf("Cell not found after %d trials. Trying again (Press Ctrl+C to exit)\n", ntrial++);
+      }
+    } while (ret == 0 && !go_exit);
+
+    if (go_exit) {
+      srslte_rf_close(&rf);
+      exit(0);
+    }
+
+    srslte_rf_stop_rx_stream(&rf);
+    srslte_rf_flush_buffer(&rf);
+
+    /* set sampling frequency */ //임시용. 위의 tx sampling rate 설정과 합칠 수 있음.
+    printf("Setting sampling rate %.2f MHz\n", (float) srate/1000000);
+    float srate_rf2 = srslte_rf_set_rx_srate(&rf, (double) srate);
+    if (srate_rf2 != srate) {
+      fprintf(stderr, "Could not set sampling rate\n");
+      exit(-1);
+    }
+    //임시용. 위의 tx sampling rate 설정과 합칠 수 있음.
+
+    INFO("Stopping RF and flushing buffer...\r");
+    if (srslte_ue_sync_init_multi_decim(&ue_sync,
+          cell.nof_prb,
+          cell.id==1000,
+          srslte_rf_recv_wrapper,
+          prog_args.rf_nof_rx_ant,
+          (void*) &rf,decimate))
+    {
+      fprintf(stderr, "Error initiating ue_sync\n");
+      exit(-1);
+    }
+    if (srslte_ue_sync_set_cell(&ue_sync, cell))
+    {
+      fprintf(stderr, "Error initiating ue_sync\n");
+      exit(-1);
+    }
+    // ******************** MODIFIED END *************************************
+
   }
 #endif
 
