@@ -91,6 +91,7 @@ uint32_t multiplex_nof_layers = 1;
 int mbsfn_area_id = -1;
 char *rf_args = "";
 float rf_amp = 0.8, rf_gain = 70.0, rf_freq = 2400000000;
+srslte_ue_sync_t ue_sync;
 
 bool null_file_sink=false; 
 srslte_filesink_t fsink;
@@ -109,6 +110,7 @@ srslte_ra_dl_dci_t ra_dl;
 int rvidx[SRSLTE_MAX_CODEWORDS] = {0, 0};
 
 cf_t *sf_buffer[SRSLTE_MAX_PORTS] = {NULL}, *output_buffer [SRSLTE_MAX_PORTS] = {NULL};
+cf_t *sf_buffer_sync[SRSLTE_MAX_PORTS] = {NULL};
 
 
 int sf_n_re, sf_n_samples;
@@ -220,6 +222,18 @@ void parse_args(int argc, char **argv) {
   }
 #endif
 }
+
+#ifndef DISABLE_RF
+int srslte_rf_recv_wrapper(void *h, cf_t *data[SRSLTE_MAX_PORTS], uint32_t nsamples, srslte_timestamp_t *t) {
+  //printf(" ----  Receive %d samples  ---- \n", nsamples);
+  void *ptr[SRSLTE_MAX_PORTS];
+  for (int i=0;i<SRSLTE_MAX_PORTS;i++) {
+    ptr[i] = data[i];
+  }
+  //return srslte_rf_recv_with_time_multi(h, ptr, nsamples, true, NULL, NULL);
+  return srslte_rf_recv_with_time_multi(h, ptr, nsamples, true, &(t->full_secs), &(t->frac_secs));
+}
+#endif
   
 void base_init() {
   int i;
@@ -433,6 +447,9 @@ void base_free() {
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
     if (sf_buffer[i]) {
       free(sf_buffer[i]);
+    }
+    if (sf_buffer_sync[i]) {
+      free(sf_buffer_sync[i]);
     }
 
     if (output_buffer[i]) {
@@ -801,7 +818,7 @@ int main(int argc, char **argv) {
 
     uint32_t ntrial = 0;
     int ret = 0;
-    srslte_cell_t cell;
+    //srslte_cell_t cell;
     do {
       //ret = rf_search_and_decode_mib(&rf, prog_args.rf_nof_rx_ant, &cell_detect_config, prog_args.force_N_id_2, &cell, &cfo);
       ret = rf_search_and_decode_mib(&rf, 1, &cell_detect_config, -1, &cell, &cfo);
@@ -835,7 +852,7 @@ int main(int argc, char **argv) {
           cell.nof_prb,
           cell.id==1000,
           srslte_rf_recv_wrapper,
-          prog_args.rf_nof_rx_ant,
+          1, //prog_args.rf_nof_rx_ant
           (void*) &rf,decimate))
     {
       fprintf(stderr, "Error initiating ue_sync\n");
@@ -846,6 +863,38 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Error initiating ue_sync\n");
       exit(-1);
     }
+    
+    ue_sync.cfo_current_value = cfo/15000;
+    ue_sync.cfo_is_copied = true;
+    ue_sync.cfo_correct_enable_find = true;
+    srslte_sync_set_cfo_cp_enable(&ue_sync.sfind, false, 0);
+
+    //for (int i=0;i<prog_args.rf_nof_rx_ant;i++) {
+    for (int i=0;i<1;i++) { // 1이 바뀌면 free쪽에도 바꾸어 줄것.
+      sf_buffer_sync[i] = srslte_vec_malloc(3*sizeof(cf_t)*SRSLTE_SF_LEN_PRB(100));
+      //sf_buffer_sync[i] = srslte_vec_malloc(3*sizeof(cf_t)*SRSLTE_SF_LEN_PRB(cell.nof_prb));
+      if (!sf_buffer_sync[i]) {
+        perror("malloc");
+        exit(-1);
+      }
+    }
+
+    srslte_rf_start_rx_stream(&rf, false);
+    srslte_timestamp_t last_stamp;
+    //for (int i = 0; i< 100;i++) {
+    while(!go_exit) {
+      ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
+        printf("[%d]CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+            srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+      }
+      //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
+      //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
+    }
+    srslte_ue_sync_free(&ue_sync);
+    srslte_rf_close(&rf);
+    exit(0);
+
     // ******************** MODIFIED END *************************************
 
   }
