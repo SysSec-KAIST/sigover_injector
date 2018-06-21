@@ -24,6 +24,8 @@
  *
  */
 
+#ifndef RF_DEV_H
+#define RF_DEV_H
 
 /* RF frontend API */
 typedef struct {
@@ -242,3 +244,4 @@ static rf_dev_t *available_devices[] = {
 #endif
   NULL
 };
+#endif

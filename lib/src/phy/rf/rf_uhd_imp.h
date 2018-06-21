@@ -23,6 +23,8 @@
  * and at http://www.gnu.org/licenses/.
  *
  */
+#ifndef RF_UHD_IMP_H
+#define RF_UHD_IMP_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -135,3 +137,4 @@ SRSLTE_API int rf_uhd_send_timed_multi(void *h,
                                        bool is_start_of_burst,
                                        bool is_end_of_burst);
 
+#endif
