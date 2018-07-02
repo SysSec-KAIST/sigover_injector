@@ -49,6 +49,7 @@
 #include "srslte/phy/common/phy_common.h"
 #include "../src/phy/rf/uhd_c_api.h"
 #include "pdsch_enodeb.h"
+#include "hj.h"
 //#include "../src/phy/rf/rf_uhd_imp.h"
 srslte_rf_t rf;
 #else
@@ -115,6 +116,7 @@ int rvidx[SRSLTE_MAX_CODEWORDS] = {0, 0};
 
 cf_t *sf_buffer[SRSLTE_MAX_PORTS] = {NULL}, *output_buffer [SRSLTE_MAX_PORTS] = {NULL};
 cf_t *sf_buffer_sync[SRSLTE_MAX_PORTS] = {NULL};
+cf_t *output_buffer2 [SRSLTE_MAX_PORTS] = {NULL};
 
 
 int sf_n_re, sf_n_samples;
@@ -294,6 +296,14 @@ void base_init() {
     }
     bzero(output_buffer[i], sizeof(cf_t) * sf_n_samples);
   }
+  for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
+    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*100);
+    if (!output_buffer2[i]) {
+      perror("malloc");
+      exit(-1);
+    }
+    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*100);
+  }
 
 
   /* open file or USRP */
@@ -458,6 +468,9 @@ void base_free() {
 
     if (output_buffer[i]) {
       free(output_buffer[i]);
+    }
+    if (output_buffer2[i]) {
+      free(output_buffer2[i]);
     }
   }
   if (output_file_name) {
@@ -709,6 +722,13 @@ void *net_thread_fnc(void *arg) {
   } while(n >= 0);
   return NULL;
 }
+void tx_thread() {
+  bool start_of_burst = true;
+  while(!go_exit) {
+    srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*100, true, start_of_burst, false);
+    start_of_burst = false;
+  }
+}
 
 
 int main(int argc, char **argv) {
@@ -947,10 +967,12 @@ int main(int argc, char **argv) {
         exit(-1);
       }
     }
+    read_file(output_buffer2[0], "lte_frame.dat");
 
     srslte_rf_start_rx_stream(&rf, false);
     srslte_timestamp_t last_stamp;
     //for (int i = 0; i< 100;i++) {
+    /*
     while(!go_exit) {
       ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
@@ -960,7 +982,9 @@ int main(int argc, char **argv) {
       //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
       //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
     }
+    */
     //TODO: get_last_timestamp를 활용해서 0.1초 후에 timed transmit 하자.
+    tx_thread();
     srslte_ue_sync_free(&ue_sync);
     srslte_rf_close(&rf);
     exit(0);
