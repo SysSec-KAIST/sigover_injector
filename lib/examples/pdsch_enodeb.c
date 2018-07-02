@@ -24,6 +24,7 @@
  *
  */
 
+#include <uhd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,6 +47,9 @@
 #include "srslte/phy/rf/rf.h"
 #include "srslte/phy/rf/rf_utils.h"
 #include "srslte/phy/common/phy_common.h"
+#include "../src/phy/rf/uhd_c_api.h"
+#include "pdsch_enodeb.h"
+//#include "../src/phy/rf/rf_uhd_imp.h"
 srslte_rf_t rf;
 #else
 #warning Compiling pdsch_ue with no RF support
@@ -812,9 +816,9 @@ int main(int argc, char **argv) {
     printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
     // ******************** MODIFIED START *************************************
     printf("Set RX freq: %.2f MHz\n", srslte_rf_set_rx_freq(&rf, rf_freq) / 1000000);
-    srslte_rf_set_rx_gain(&rf, 40);
+    srslte_rf_set_rx_gain(&rf, 15);
     bool locked = srslte_rf_rx_wait_lo_locked(&rf);
-    printf("%s\n",locked ? "locked" : "Not locked");
+    printf("[1] %s\n",locked ? "locked" : "Not locked");
 
     uint32_t ntrial = 0;
     int ret = 0;
@@ -863,6 +867,71 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Error initiating ue_sync\n");
       exit(-1);
     }
+
+    /*
+    printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
+
+    double rf_uhd_get_tx_gain(void *h)
+    {
+      rf_uhd_handler_t *handler = (rf_uhd_handler_t*) h;
+      double gain;
+      uhd_usrp_get_tx_gain(handler->usrp, 0, "", &gain);
+      return gain;
+    }
+    double rf_uhd_set_tx_freq(void *h, double freq)
+    {
+      uhd_tune_request_t tune_request = {
+          .target_freq = freq,
+          .rf_freq_policy = UHD_TUNE_REQUEST_POLICY_AUTO,
+          .dsp_freq_policy = UHD_TUNE_REQUEST_POLICY_AUTO,
+      };
+      uhd_tune_result_t tune_result;
+      rf_uhd_handler_t *handler = (rf_uhd_handler_t*) h;
+      for (int i=0;i<handler->nof_tx_channels;i++) {
+        uhd_usrp_set_tx_freq(handler->usrp, &tune_request, i, &tune_result);
+      }
+      return freq;
+    }
+
+    std::cout << std::endl << "Attempt to detect the PPS and set the time..." << std::endl << std::endl;
+    usrp->set_time_unknown_pps(uhd::time_spec_t(0.0));
+    std::cout << std::endl << "Success!" << std::endl << std::endl;
+    */
+    rf_uhd_handler_t *handler = (rf_uhd_handler_t *)rf.handler;
+    uhd_usrp_set_time_unknown_pps(handler->usrp, 0, 0.0);
+    usleep(1000000);
+    uhd_tune_request_t tune_request = {
+        .target_freq = rf_freq,
+        .rf_freq_policy = UHD_TUNE_REQUEST_POLICY_AUTO,
+        .dsp_freq_policy = UHD_TUNE_REQUEST_POLICY_AUTO,
+    };
+    uhd_tune_result_t tune_result;
+    time_t full_secs;
+    double frac_secs;
+    uhd_usrp_get_time_now(handler->usrp, 0, &full_secs, &frac_secs);
+    printf("[get_current_time] %.f: %f us\n",difftime(full_secs, (time_t) 0),(frac_secs*1e6)); //TEMP
+    uhd_usrp_set_command_time(handler->usrp, full_secs+1, frac_secs, 0);
+    //uhd_usrp_set_rx_freq(handler->usrp, &tune_request, channel, &tune_result);
+    uhd_usrp_set_rx_freq(handler->usrp, &tune_request, 0, &tune_result);
+    uhd_usrp_set_tx_freq(handler->usrp, &tune_request, 0, &tune_result);
+    uhd_usrp_clear_command_time(handler->usrp, 0);
+    usleep(1000000);
+    locked = srslte_rf_rx_wait_lo_locked(&rf);
+    printf("[2] %s\n",locked ? "locked" : "Not locked");
+    // 인젝터를 MIMO로 바꿀때 이 코드에서 0이 들어간 것을 주의할것. 0번째 채널이라는 말임. 0,1 두 채널로 바꿔야함.
+    double tx_freq, rx_freq;
+    uhd_usrp_get_tx_freq(handler->usrp, 0, &tx_freq);
+    uhd_usrp_get_rx_freq(handler->usrp, 0, &rx_freq);
+    if ( tx_freq != rf_freq) {
+      printf("[Tx freq_diff] %f\n",(tx_freq - rf_freq));
+    }
+    if ( rx_freq != rf_freq) {
+      printf("[Rx freq_diff] %f\n",(rx_freq - rf_freq));
+    }
+    
+
+    //uhd_usrp_get_rx_gain(handler->usrp, 0, "", &ggain);
+    //printf("get_rx_gain: %f\n",ggain);
     
     ue_sync.cfo_current_value = cfo/15000;
     ue_sync.cfo_is_copied = true;
@@ -885,12 +954,13 @@ int main(int argc, char **argv) {
     while(!go_exit) {
       ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
-        printf("[%d]CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
             srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
       }
       //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
       //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
     }
+    //TODO: get_last_timestamp를 활용해서 0.1초 후에 timed transmit 하자.
     srslte_ue_sync_free(&ue_sync);
     srslte_rf_close(&rf);
     exit(0);
