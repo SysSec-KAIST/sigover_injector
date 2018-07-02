@@ -97,6 +97,7 @@ int mbsfn_area_id = -1;
 char *rf_args = "";
 float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
+srslte_ue_mib_t ue_mib;
 
 bool null_file_sink=false; 
 srslte_filesink_t fsink;
@@ -121,6 +122,7 @@ cf_t *output_buffer2 [SRSLTE_MAX_PORTS] = {NULL};
 
 int sf_n_re, sf_n_samples;
 
+srslte_timestamp_t last_stamp;
 pthread_t net_thread; 
 pthread_t tx_thread;
 pthread_t rx_thread;
@@ -738,10 +740,31 @@ void *tx_thread_func() {
 }
 void *rx_thread_func() {
   int ret;
+  uint8_t bch_payload[SRSLTE_BCH_PAYLOAD_LEN];
+  int sfn_offset;
+  uint32_t sfn;
+  int n;
+  srslte_cell_t cell;
   while(!go_exit) {
     ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
     if (ret == 1) {
-      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0) {
+        n = srslte_ue_mib_decode(&ue_mib, bch_payload, NULL, &sfn_offset);
+        if (n < 0) {
+          fprintf(stderr, "Error decoding UE MIB\n");
+          exit(-1);
+        } else if (n == SRSLTE_UE_MIB_FOUND) {
+          srslte_pbch_mib_unpack(bch_payload, &cell, &sfn);
+          //srslte_cell_fprint(stdout, &cell, sfn);
+          //printf("Decoded MIB. SFN: %d, offset: %d\n", sfn, sfn_offset);
+          sfn = (sfn + sfn_offset)%1024;
+        }
+      }
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0) {
+        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz, SFN: %d\n",
+            srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync), sfn);
+      }
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
         printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
             srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
       }
@@ -749,8 +772,8 @@ void *rx_thread_func() {
     else {
       printf("zerocopy_multi failed\n");
     }
-    //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
-    //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
+    srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
+    printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
   }
   return NULL;
 }
@@ -758,7 +781,6 @@ void *rx_thread_func() {
 
 int main(int argc, char **argv) {
   int decimate = 1;
-  srslte_ue_mib_t ue_mib;
   int sfn_offset;
   float cfo = 0;
   int nf=0, sf_idx=0, N_id_2=0;
@@ -993,9 +1015,19 @@ int main(int argc, char **argv) {
       }
     }
     read_file(output_buffer2[0], "lte_frame.dat");
+    
+    //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
+    if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
+      fprintf(stderr, "Error initaiting UE MIB decoder\n");
+      exit(-1);
+    }
+    if (srslte_ue_mib_set_cell(&ue_mib, cell)) {
+      fprintf(stderr, "Error initaiting UE MIB decoder\n");
+      exit(-1);
+    }
+    srslte_pbch_decode_reset(&ue_mib.pbch);
 
     srslte_rf_start_rx_stream(&rf, false);
-    srslte_timestamp_t last_stamp;
     //for (int i = 0; i< 100;i++) {
     /*
     while(!go_exit) {
