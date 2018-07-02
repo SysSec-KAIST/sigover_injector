@@ -1,3 +1,6 @@
+#ifndef PDSCH_ENODEB_H
+#define PDSCH_ENODEB_H
+
 typedef struct {
   char *devname;
   uhd_usrp_handle usrp;
@@ -23,3 +26,5 @@ typedef struct {
   bool async_thread_running;
   pthread_t async_thread;
 } rf_uhd_handler_t;
+
+#endif
