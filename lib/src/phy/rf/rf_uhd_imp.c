@@ -845,8 +845,8 @@ int rf_uhd_send_timed_multi(void *h,
       uhd_tx_metadata_add_time_spec(&handler->tx_md, txd_samples/handler->tx_rate);
       n += txd_samples;
       trials++;
-    } while (n < nsamples && trials < 100);
-    return nsamples;
+    } while (n < nsamples && trials < 300);
+    return n;
   } else {
     const void *buffs_ptr[4];
     for (int i = 0; i < 4; i++) {
