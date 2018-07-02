@@ -95,7 +95,7 @@ uint32_t multiplex_nof_layers = 1;
 
 int mbsfn_area_id = -1;
 char *rf_args = "";
-float rf_amp = 0.8, rf_gain = 70.0, rf_freq = 2400000000;
+float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
 
 bool null_file_sink=false; 
@@ -727,14 +727,12 @@ void *net_thread_fnc(void *arg) {
 void *tx_thread_func() {
   bool start_of_burst = true;
   while(!go_exit) {
-    /*
     int ret = srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*10, true, start_of_burst, false);
     if (ret != sf_n_samples*10) {
       printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
       exit(-1);
     }
     start_of_burst = false;
-    */
   }
   return NULL;
 }
@@ -860,6 +858,7 @@ int main(int argc, char **argv) {
       exit(-1);
     }
     printf("Set TX gain: %.1f dB\n", srslte_rf_set_tx_gain(&rf, rf_gain));
+    printf("Get TX gain: %.1f dB\n", srslte_rf_get_tx_gain(&rf));
     printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
     // ******************** MODIFIED START *************************************
     printf("Set RX freq: %.2f MHz\n", srslte_rf_set_rx_freq(&rf, rf_freq) / 1000000);
@@ -979,7 +978,6 @@ int main(int argc, char **argv) {
 
     //uhd_usrp_get_rx_gain(handler->usrp, 0, "", &ggain);
     //printf("get_rx_gain: %f\n",ggain);
-    
     ue_sync.cfo_current_value = cfo/15000;
     ue_sync.cfo_is_copied = true;
     ue_sync.cfo_correct_enable_find = true;
