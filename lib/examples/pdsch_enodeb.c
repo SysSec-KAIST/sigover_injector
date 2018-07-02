@@ -122,6 +122,8 @@ cf_t *output_buffer2 [SRSLTE_MAX_PORTS] = {NULL};
 int sf_n_re, sf_n_samples;
 
 pthread_t net_thread; 
+pthread_t tx_thread;
+pthread_t rx_thread;
 void *net_thread_fnc(void *arg);
 sem_t net_sem;
 bool net_packet_ready = false; 
@@ -297,12 +299,12 @@ void base_init() {
     bzero(output_buffer[i], sizeof(cf_t) * sf_n_samples);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
-    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*100);
+    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*10);
     if (!output_buffer2[i]) {
       perror("malloc");
       exit(-1);
     }
-    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*100);
+    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*10);
   }
 
 
@@ -722,12 +724,27 @@ void *net_thread_fnc(void *arg) {
   } while(n >= 0);
   return NULL;
 }
-void tx_thread() {
+void *tx_thread_func() {
   bool start_of_burst = true;
   while(!go_exit) {
-    srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*100, true, start_of_burst, false);
+    int ret = srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*10, true, start_of_burst, false);
+    //printf("%d\n",ret);
     start_of_burst = false;
   }
+  return NULL;
+}
+void *rx_thread_func() {
+  int ret;
+  while(!go_exit) {
+    ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
+    if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
+      printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+          srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+    }
+    //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
+    //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
+  }
+  return NULL;
 }
 
 
@@ -984,7 +1001,20 @@ int main(int argc, char **argv) {
     }
     */
     //TODO: get_last_timestamp를 활용해서 0.1초 후에 timed transmit 하자.
-    tx_thread();
+    if (pthread_create(&tx_thread, NULL, tx_thread_func, NULL)) {
+      perror("pthread_create");
+      exit(-1);
+    }
+    if (pthread_create(&rx_thread, NULL, rx_thread_func, NULL)) {
+      perror("pthread_create");
+      exit(-1);
+    }
+    //tx_thread_func();
+    int status;
+    printf("before\n");
+    pthread_join(tx_thread, (void **)&status);
+    pthread_join(rx_thread, (void **)&status);
+    printf("after\n");
     srslte_ue_sync_free(&ue_sync);
     srslte_rf_close(&rf);
     exit(0);
