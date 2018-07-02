@@ -727,9 +727,14 @@ void *net_thread_fnc(void *arg) {
 void *tx_thread_func() {
   bool start_of_burst = true;
   while(!go_exit) {
+    /*
     int ret = srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*10, true, start_of_burst, false);
-    //printf("%d\n",ret);
+    if (ret != sf_n_samples*10) {
+      printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+      exit(-1);
+    }
     start_of_burst = false;
+    */
   }
   return NULL;
 }
@@ -737,9 +742,14 @@ void *rx_thread_func() {
   int ret;
   while(!go_exit) {
     ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
-    if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
-      printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
-          srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+    if (ret == 1) {
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
+        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+            srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+      }
+    }
+    else {
+      printf("zerocopy_multi failed\n");
     }
     //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
     //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
@@ -992,9 +1002,14 @@ int main(int argc, char **argv) {
     /*
     while(!go_exit) {
       ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
-      if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
-        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
-            srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+      if (ret == 1) {
+        if (srslte_ue_sync_get_sfidx(&ue_sync) == 0 || srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
+          printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+              srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
+        }
+      }
+      else {
+        printf("zerocopy_multi failed\n");
       }
       //srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
       //printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
