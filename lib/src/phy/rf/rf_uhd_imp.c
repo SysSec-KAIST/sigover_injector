@@ -820,6 +820,7 @@ int rf_uhd_send_timed_multi(void *h,
         uhd_tx_metadata_set_start(&handler->tx_md, is_start_of_burst);
       } else {
         uhd_tx_metadata_set_start(&handler->tx_md, false);
+        uhd_tx_metadata_set_has_time_spec(&handler->tx_md, false);
       }
       
       // middle packets are never end of burst, last one as defined
@@ -836,13 +837,13 @@ int rf_uhd_send_timed_multi(void *h,
         buffs_ptr[i] = buff;
       }
       uhd_error error = uhd_tx_streamer_send(handler->tx_stream, buffs_ptr, 
-                                             tx_samples, &handler->tx_md, 3.0, &txd_samples);
+                                             tx_samples, &handler->tx_md, 30.0, &txd_samples);
       if (error) {
         fprintf(stderr, "Error sending to UHD: %d\n", error);
         return -1; 
       }
       // Increase time spec 
-      uhd_tx_metadata_add_time_spec(&handler->tx_md, txd_samples/handler->tx_rate);
+      //uhd_tx_metadata_add_time_spec(&handler->tx_md, txd_samples/handler->tx_rate);
       n += txd_samples;
       trials++;
     } while (n < nsamples && trials < 300);
