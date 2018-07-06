@@ -726,7 +726,38 @@ void *net_thread_fnc(void *arg) {
   } while(n >= 0);
   return NULL;
 }
+/*
+// continous transmission
 void *tx_thread_func() {
+  srslte_timestamp_t last_time;
+  srslte_timestamp_t future_time;
+  bool start_of_burst = true;
+  bool end_of_burst = true;
+  bool first = true;
+  float time_offset = 2;
+  usleep(3000000);
+  memcpy(&last_time, &last_stamp, sizeof(srslte_timestamp_t));
+  while (last_time.full_secs == last_stamp.full_secs && last_time.frac_secs == last_stamp.frac_secs) {
+    usleep(10);
+  }
+  //printf("[1][get_last_time] %.f: %f us\n",difftime(last_time.full_secs, (time_t) 0),(last_time.frac_secs*1e6));
+  future_time.full_secs = last_time.full_secs;
+  future_time.frac_secs = last_time.frac_secs + time_offset;
+
+  if (future_time.frac_secs >= 1.0) {
+    future_time.full_secs++;
+    future_time.frac_secs--;
+  }
+
+  printf("[future_time] %.f: %f s\n",difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+  //printf("[current_time] %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
+  int ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*10, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+  if (ret != sf_n_samples*10) {
+    printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+    exit(-1);
+  }
+  first = false;
+  //comments below
   bool start_of_burst = true;
   while(!go_exit) {
     int ret = srslte_rf_send_multi(&rf, (void**) output_buffer2, sf_n_samples*10, true, start_of_burst, false);
@@ -735,6 +766,47 @@ void *tx_thread_func() {
       exit(-1);
     }
     start_of_burst = false;
+  }
+  //comments above
+  return NULL;
+}
+*/
+// timed transmission
+void *tx_thread_func() {
+  srslte_timestamp_t last_time;
+  srslte_timestamp_t future_time;
+  bool start_of_burst = true;
+  bool end_of_burst = true;
+  bool first = true;
+  float time_offset = 0.01;
+  usleep(3000000);
+  while (!go_exit) {
+    memcpy(&last_time, &last_stamp, sizeof(srslte_timestamp_t));
+    while (last_time.full_secs == last_stamp.full_secs && last_time.frac_secs == last_stamp.frac_secs) {
+      usleep(10);
+    }
+    //printf("[1][get_last_time] %.f: %f us\n",difftime(last_time.full_secs, (time_t) 0),(last_time.frac_secs*1e6));
+    if (first) {
+      future_time.full_secs = last_time.full_secs;
+      future_time.frac_secs = last_time.frac_secs + time_offset;
+    }
+    else {
+      future_time.frac_secs += time_offset;
+    }
+
+    if (future_time.frac_secs >= 1.0) {
+      future_time.full_secs += (int) future_time.frac_secs;
+      future_time.frac_secs -= (int) future_time.frac_secs;
+    }
+
+    //printf("[future_time] %.f: %f s\n",difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+    //printf("[1][current_time] %.f: %f s\n",difftime(last_time.full_secs, (time_t) 0),last_time.frac_secs);
+    int ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*10, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+    if (ret != sf_n_samples*10) {
+      printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+      exit(-1);
+    }
+    first = false;
   }
   return NULL;
 }
@@ -745,6 +817,7 @@ void *rx_thread_func() {
   uint32_t sfn;
   int n;
   srslte_cell_t cell;
+  srslte_timestamp_t previous_time;
   while(!go_exit) {
     ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
     if (ret == 1) {
@@ -753,6 +826,8 @@ void *rx_thread_func() {
         if (n < 0) {
           fprintf(stderr, "Error decoding UE MIB\n");
           exit(-1);
+        } else if (n == 0) {
+          printf("MIB DECODING FAILED\n");
         } else if (n == SRSLTE_UE_MIB_FOUND) {
           srslte_pbch_mib_unpack(bch_payload, &cell, &sfn);
           //srslte_cell_fprint(stdout, &cell, sfn);
@@ -760,20 +835,33 @@ void *rx_thread_func() {
           sfn = (sfn + sfn_offset)%1024;
         }
       }
+      /*
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 0) {
-        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz, SFN: %d\n",
+        printf("CFO: %+5.12f Hz, SFO: %+3.6f Hz, SFN: %d\n",
             srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync), sfn);
       }
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 5) {
-        printf("CFO: %+3.12f Hz, SFO: %+3.6f Hz\n",
+        printf("CFO: %+5.12f Hz, SFO: %+3.6f Hz\n",
             srslte_ue_sync_get_cfo(&ue_sync), srslte_ue_sync_get_sfo(&ue_sync));
       }
+      */
     }
     else {
       printf("zerocopy_multi failed\n");
     }
+    //previous_time.full_secs = last_stamp.full_secs;
+    //previous_time.frac_secs = last_stamp.frac_secs;
     srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
-    printf("[get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
+    /*
+    if (last_stamp.frac_secs - previous_time.frac_secs != 0.001) {
+      printf("[Now] %5.17f\n",last_stamp.frac_secs*1e6);
+      printf("[Bef] %5.17f\n", previous_time.frac_secs*1e6);
+      printf("[Sub] %5.17f\n", (last_stamp.frac_secs - previous_time.frac_secs)*1e6);
+    }
+    */
+
+    //printf("[2][get_last_time] %.f: %f us\n",difftime(last_stamp.full_secs, (time_t) 0),(last_stamp.frac_secs*1e6));
+    //printf("[2][current_time] %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
   }
   return NULL;
 }
@@ -1014,7 +1102,7 @@ int main(int argc, char **argv) {
         exit(-1);
       }
     }
-    read_file(output_buffer2[0], "lte_frame.dat");
+    read_file(output_buffer2[0], "zadoff_only_at_subframe_2.dat");
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
