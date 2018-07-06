@@ -97,6 +97,7 @@ int mbsfn_area_id = -1;
 char *rf_args = "";
 float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
+srslte_ue_dl_t ue_dl;
 srslte_ue_mib_t ue_mib;
 
 bool null_file_sink=false; 
@@ -783,7 +784,7 @@ void *tx_thread_func() {
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
-  float time_offset = 0.002;
+  float time_offset = 0.05;
   usleep(3000000);
   while (!go_exit) {
     memcpy(&last_time, &last_stamp, sizeof(srslte_timestamp_t));
@@ -826,6 +827,7 @@ void *rx_thread_func() {
   int sfn_offset;
   uint32_t sfn;
   int n;
+  bool acks [SRSLTE_MAX_CODEWORDS] = {false};
   srslte_cell_t cell;
   srslte_timestamp_t previous_time;
   while(!go_exit) {
@@ -843,6 +845,20 @@ void *rx_thread_func() {
           //srslte_cell_fprint(stdout, &cell, sfn);
           //printf("Decoded MIB. SFN: %d, offset: %d\n", sfn, sfn_offset);
           sfn = (sfn + sfn_offset)%1024;
+        }
+      }
+      if (srslte_ue_sync_get_sfidx(&ue_sync) == 1) {
+        n = srslte_ue_dl_decode(&ue_dl, data, 0, sfn*10+srslte_ue_sync_get_sfidx(&ue_sync), acks);
+        //TODO: MIMO일때는 srslte_ue_dl_decode 로직이 달라짐. 반드시 다시 pdsch_ue를 참고할것.
+        if (n > 0) {
+          if (n != 904) {
+            printf("TB is not 904!!!\n");
+          }
+          //printf("Format: %s\n", srslte_dci_format_string(ue_dl.dci_format));
+          //srslte_ra_dl_grant_fprint(stdout, &ue_dl.pdsch_cfg.grant);
+        }
+        else {
+          printf("n < 0\n");
         }
       }
       /*
@@ -1101,6 +1117,7 @@ int main(int argc, char **argv) {
     ue_sync.cfo_current_value = cfo/15000;
     ue_sync.cfo_is_copied = true;
     ue_sync.cfo_correct_enable_find = true;
+    ue_sync.cfo_correct_enable_track = true;
     srslte_sync_set_cfo_cp_enable(&ue_sync.sfind, false, 0);
 
     //for (int i=0;i<prog_args.rf_nof_rx_ant;i++) {
@@ -1123,6 +1140,25 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Error initaiting UE MIB decoder\n");
       exit(-1);
     }
+    //if (srslte_ue_dl_init(&ue_dl, sf_buffer_sync, cell.nof_prb, prog_args.rf_nof_rx_ant)) {
+    //TODO: 나중에 MIMO로 할때 또는 20MHz 대역폭으로 실험할때, TX/RX 안테나 갯수 및 cell 변수를 반드시 다시 고려할것!
+    if (srslte_ue_dl_init(&ue_dl, sf_buffer_sync, cell.nof_prb, 1)) {
+      fprintf(stderr, "Error initiating UE downlink processing module\n");
+      exit(-1);
+    }
+    if (srslte_ue_dl_set_cell(&ue_dl, cell)) {
+      fprintf(stderr, "Error initiating UE downlink processing module\n");
+      exit(-1);
+    }
+    /*
+    //TODO: RS 기반 CFO 추정 과 average_subframe에 대해 알아보기. 기본적으로 false였음.
+    srslte_chest_dl_cfo_estimate_enable(&ue_dl.chest, prog_args.enable_cfo_ref, 1023);
+    srslte_chest_dl_average_subframe(&ue_dl.chest, prog_args.average_subframe);
+    */
+    srslte_chest_dl_cfo_estimate_enable(&ue_dl.chest, false, 1023);
+    srslte_chest_dl_average_subframe(&ue_dl.chest, false);
+    srslte_ue_dl_set_rnti(&ue_dl, 0x1234); // RNTI
+
     srslte_pbch_decode_reset(&ue_mib.pbch);
 
     srslte_rf_start_rx_stream(&rf, false);
