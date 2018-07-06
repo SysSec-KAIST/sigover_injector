@@ -773,12 +773,17 @@ void *tx_thread_func() {
 */
 // timed transmission
 void *tx_thread_func() {
+  unsigned long mask = 8; /* processor 3 */   // 1 2 4 8
+  /* bind process to processor 3 */
+  if (pthread_setaffinity_np(pthread_self(), sizeof(mask), (cpu_set_t *)&mask) < 0) {
+    perror("pthread_setaffinity_np");
+  }
   srslte_timestamp_t last_time;
   srslte_timestamp_t future_time;
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
-  float time_offset = 0.01;
+  float time_offset = 0.002;
   usleep(3000000);
   while (!go_exit) {
     memcpy(&last_time, &last_stamp, sizeof(srslte_timestamp_t));
@@ -811,6 +816,11 @@ void *tx_thread_func() {
   return NULL;
 }
 void *rx_thread_func() {
+  unsigned long mask = 4; /* processor 2 */   // 1 2 4 8
+  /* bind process to processor 2 */
+  if (pthread_setaffinity_np(pthread_self(), sizeof(mask), (cpu_set_t *)&mask) < 0) {
+    perror("pthread_setaffinity_np");
+  }
   int ret;
   uint8_t bch_payload[SRSLTE_BCH_PAYLOAD_LEN];
   int sfn_offset;
