@@ -99,6 +99,10 @@ float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
 srslte_ue_dl_t ue_dl;
 srslte_ue_mib_t ue_mib;
+uint32_t sfn;
+int rx_ret = -1; // -1: zerocopy_multi 실패 0: zerocopy_multi 성공
+int sf_idx;
+bool updated = false;
 
 bool null_file_sink=false; 
 srslte_filesink_t fsink;
@@ -127,6 +131,8 @@ srslte_timestamp_t last_stamp;
 pthread_t net_thread; 
 pthread_t tx_thread;
 pthread_t rx_thread;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // 쓰레드 초기화
+pthread_cond_t cond  = PTHREAD_COND_INITIALIZER;
 void *net_thread_fnc(void *arg);
 sem_t net_sem;
 bool net_packet_ready = false; 
@@ -501,6 +507,8 @@ void sig_int_handler(int signo)
   printf("SIGINT received. Exiting...\n");
   if (signo == SIGINT) {
     go_exit = true;
+    updated = true;
+    pthread_cond_signal(&cond);
   }
 }
 
@@ -774,18 +782,50 @@ void *tx_thread_func() {
 */
 // timed transmission
 void *tx_thread_func() {
-  unsigned long mask = 8; /* processor 3 */   // 1 2 4 8
-  /* bind process to processor 3 */
+  unsigned long mask = 8; // processor 4   // 1 2 4 8 (1,2,3,4)
   if (pthread_setaffinity_np(pthread_self(), sizeof(mask), (cpu_set_t *)&mask) < 0) {
     perror("pthread_setaffinity_np");
   }
+  //uhd_set_thread_priority(1, true);
   srslte_timestamp_t last_time;
   srslte_timestamp_t future_time;
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
   float time_offset = 0.05;
-  usleep(3000000);
+
+
+  ///
+  int cur_sf_idx;
+  uint32_t cur_sfn;
+  int cur_rx_ret;
+  srslte_timestamp_t cur_time;
+  ///
+
+  while (!go_exit) {
+    pthread_mutex_lock(&mutex);
+    while (updated == false) {
+      pthread_cond_wait(&cond, &mutex);
+    }
+    updated = false;
+
+    cur_sf_idx = sf_idx;
+    cur_sfn = sfn;
+    cur_rx_ret = rx_ret;
+    memcpy(&cur_time, &last_stamp, sizeof(srslte_timestamp_t));
+    fprintf(stderr,"\n[Tx] sfn: %d\n",cur_sfn);
+    fprintf(stderr,"[Tx] rx_ret: %d\n",cur_rx_ret);
+    fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
+    fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
+    pthread_mutex_unlock(&mutex);
+    /*
+    if (cur_rx_ret == 0 && cur_sfn >= 0) {
+    }
+    */
+  }
+
+  /*
+  usleep(3000000); //FIXME: zerocopy multi의 리턴값이 30회 이상 연속으로 1이 나왔을때?, 안정적인 싱크를 획득한 후 다음 로직으로 넘어가게끔 변경.
   while (!go_exit) {
     memcpy(&last_time, &last_stamp, sizeof(srslte_timestamp_t));
     while (last_time.full_secs == last_stamp.full_secs && last_time.frac_secs == last_stamp.frac_secs) {
@@ -814,32 +854,45 @@ void *tx_thread_func() {
     }
     first = false;
   }
+  */
   return NULL;
 }
 void *rx_thread_func() {
-  unsigned long mask = 4; /* processor 2 */   // 1 2 4 8
-  /* bind process to processor 2 */
+  unsigned long mask = 4; // processor 3  // 1 2 4 8 (1,2,3,4)
   if (pthread_setaffinity_np(pthread_self(), sizeof(mask), (cpu_set_t *)&mask) < 0) {
     perror("pthread_setaffinity_np");
   }
+  //uhd_set_thread_priority(0.4, false);
   int ret;
   uint8_t bch_payload[SRSLTE_BCH_PAYLOAD_LEN];
   int sfn_offset;
-  uint32_t sfn;
   int n;
   bool acks [SRSLTE_MAX_CODEWORDS] = {false};
   srslte_cell_t cell;
   srslte_timestamp_t previous_time;
   while(!go_exit) {
+    pthread_mutex_lock(&mutex);
     ret = srslte_ue_sync_zerocopy_multi(&ue_sync, sf_buffer_sync);
+    if (ret != 1) {
+      rx_ret = -1;
+      sfn = -100;
+      fprintf(stderr,"zerocopy_multi failed\n");
+      updated = true;
+      pthread_cond_signal(&cond);
+      pthread_mutex_unlock(&mutex);
+    }
     if (ret == 1) {
+      rx_ret = 0;
+      srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
+      sf_idx = srslte_ue_sync_get_sfidx(&ue_sync);
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 0) {
         n = srslte_ue_mib_decode(&ue_mib, bch_payload, NULL, &sfn_offset);
         if (n < 0) {
           fprintf(stderr, "Error decoding UE MIB\n");
           exit(-1);
         } else if (n == 0) {
-          printf("MIB DECODING FAILED\n");
+          sfn = -100;
+          fprintf(stderr,"MIB DECODING FAILED\n");
         } else if (n == SRSLTE_UE_MIB_FOUND) {
           srslte_pbch_mib_unpack(bch_payload, &cell, &sfn);
           //srslte_cell_fprint(stdout, &cell, sfn);
@@ -847,6 +900,16 @@ void *rx_thread_func() {
           sfn = (sfn + sfn_offset)%1024;
         }
       }
+      updated = true;
+      pthread_cond_signal(&cond);
+
+      fprintf(stderr,"\n[Rx] sfn: %d\n",sfn);
+      fprintf(stderr,"[Rx] rx_ret: %d\n",rx_ret);
+      fprintf(stderr,"[Rx] sf_idx: %d\n",sf_idx);
+      fprintf(stderr,"[Rx] time: %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
+
+      pthread_mutex_unlock(&mutex);
+      usleep(1);
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 1) {
         n = srslte_ue_dl_decode(&ue_dl, data, 0, sfn*10+srslte_ue_sync_get_sfidx(&ue_sync), acks);
         //TODO: MIMO일때는 srslte_ue_dl_decode 로직이 달라짐. 반드시 다시 pdsch_ue를 참고할것.
@@ -872,12 +935,8 @@ void *rx_thread_func() {
       }
       */
     }
-    else {
-      printf("zerocopy_multi failed\n");
-    }
     //previous_time.full_secs = last_stamp.full_secs;
     //previous_time.frac_secs = last_stamp.frac_secs;
-    srslte_ue_sync_get_last_timestamp(&ue_sync,&last_stamp);
     /*
     if (last_stamp.frac_secs - previous_time.frac_secs != 0.001) {
       printf("[Now] %5.17f\n",last_stamp.frac_secs*1e6);
@@ -895,9 +954,8 @@ void *rx_thread_func() {
 
 int main(int argc, char **argv) {
   int decimate = 1;
-  int sfn_offset;
   float cfo = 0;
-  int nf=0, sf_idx=0, N_id_2=0;
+  int nf=0, N_id_2=0;
   cf_t pss_signal[SRSLTE_PSS_LEN];
   float sss_signal0[SRSLTE_SSS_LEN]; // for subframe 0
   float sss_signal5[SRSLTE_SSS_LEN]; // for subframe 5
@@ -907,7 +965,6 @@ int main(int argc, char **argv) {
   cf_t *slot1_symbols[SRSLTE_MAX_PORTS];
   srslte_dci_msg_t dci_msg;
   srslte_dci_location_t locations[SRSLTE_NSUBFRAMES_X_FRAME][30];
-  uint32_t sfn; 
   srslte_refsignal_t csr_refs;
   srslte_refsignal_t mbsfn_refs;
 
@@ -1193,7 +1250,10 @@ int main(int argc, char **argv) {
     printf("before\n");
     pthread_join(tx_thread, (void **)&status);
     pthread_join(rx_thread, (void **)&status);
-    printf("after\n");
+
+    status = pthread_mutex_destroy(&mutex);
+    printf("code  =  %d\n", status);
+    printf("PROGRAM END\n");
     srslte_ue_sync_free(&ue_sync);
     srslte_rf_close(&rf);
     exit(0);
