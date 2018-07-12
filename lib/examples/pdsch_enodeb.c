@@ -1214,6 +1214,7 @@ int main(int argc, char **argv) {
       }
     }
     read_file(output_buffer2[0], "zadoff_only_at_subframe_2.dat");
+    //read_file(output_buffer2[0], "inject_sample");
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
@@ -1279,10 +1280,10 @@ int main(int argc, char **argv) {
     pthread_join(rx_thread, (void **)&status);
 
     status = pthread_mutex_destroy(&mutex);
-    printf("code  =  %d\n", status);
-    printf("PROGRAM END\n");
     srslte_ue_sync_free(&ue_sync);
     srslte_rf_close(&rf);
+    printf("code  =  %d\n", status);
+    printf("PROGRAM END\n");
     exit(0);
 
     // ******************** MODIFIED END *************************************
