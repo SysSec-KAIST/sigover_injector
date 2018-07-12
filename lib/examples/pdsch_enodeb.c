@@ -308,12 +308,12 @@ void base_init() {
     bzero(output_buffer[i], sizeof(cf_t) * sf_n_samples);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
-    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*10);
+    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*3);
     if (!output_buffer2[i]) {
       perror("malloc");
       exit(-1);
     }
-    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*10);
+    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*3);
   }
 
 
@@ -787,17 +787,17 @@ void *tx_thread_func() {
     perror("pthread_setaffinity_np");
   }
   //uhd_set_thread_priority(1, true);
-  srslte_timestamp_t last_time;
   srslte_timestamp_t future_time;
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
-  float time_offset = 0.05;
+  float time_offset = 0.02;
 
 
   ///
   int cur_sf_idx;
   uint32_t cur_sfn;
+  uint32_t next_sfn = -1;
   int cur_rx_ret;
   srslte_timestamp_t cur_time;
   ///
@@ -813,15 +813,42 @@ void *tx_thread_func() {
     cur_sfn = sfn;
     cur_rx_ret = rx_ret;
     memcpy(&cur_time, &last_stamp, sizeof(srslte_timestamp_t));
-    fprintf(stderr,"\n[Tx] sfn: %d\n",cur_sfn);
-    fprintf(stderr,"[Tx] rx_ret: %d\n",cur_rx_ret);
-    fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
-    fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
     pthread_mutex_unlock(&mutex);
-    /*
-    if (cur_rx_ret == 0 && cur_sfn >= 0) {
+    //fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d\n",cur_sfn, next_sfn,cur_sf_idx);
+    //fprintf(stderr,"\n[Tx] sfn: %d\n",cur_sfn);
+    //fprintf(stderr,"[Tx] rx_ret: %d\n",cur_rx_ret);
+    //fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
+    //fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
+    if (cur_rx_ret == 0 && cur_sfn >= 0 && cur_sf_idx == 0) {
+      if (first == false && cur_sfn != next_sfn) {
+        fprintf(stderr,"cur_sfn: %d, next_sfn: %d\n",cur_sfn,next_sfn);
+        //pthread_mutex_unlock(&mutex);
+        continue;
+      }
+      memcpy(&future_time, &cur_time, sizeof(srslte_timestamp_t));
+      future_time.frac_secs += time_offset;
+      //offset...
+      future_time.frac_secs -= (57.0/7680000.0);
+      if (future_time.frac_secs >= 1.0) {
+        future_time.full_secs += (int) future_time.frac_secs;
+        future_time.frac_secs -= (int) future_time.frac_secs;
+      }
+      next_sfn = cur_sfn + (uint32_t)(time_offset*100);
+      next_sfn = next_sfn%1024;
+
+      printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+      //pthread_mutex_unlock(&mutex);
+      //printf("[1][current_time] %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
+      int ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+      if (ret != sf_n_samples*3) {
+        printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+        exit(-1);
+      }
+      first = false;
     }
-    */
+    else {
+      pthread_mutex_unlock(&mutex);
+    }
   }
 
   /*
@@ -903,14 +930,12 @@ void *rx_thread_func() {
       updated = true;
       pthread_cond_signal(&cond);
 
-      fprintf(stderr,"\n[Rx] sfn: %d\n",sfn);
-      fprintf(stderr,"[Rx] rx_ret: %d\n",rx_ret);
-      fprintf(stderr,"[Rx] sf_idx: %d\n",sf_idx);
-      fprintf(stderr,"[Rx] time: %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
+      //fprintf(stderr,"[Rx] sfn: %d, sf_idx: %d\n",sfn,sf_idx);
+      //fprintf(stderr,"[Rx] rx_ret: %d\n",rx_ret);
+      //fprintf(stderr,"[Rx] sf_idx: %d\n",sf_idx);
+      //fprintf(stderr,"[Rx] time: %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
 
-      pthread_mutex_unlock(&mutex);
-      usleep(1);
-      if (srslte_ue_sync_get_sfidx(&ue_sync) == 1) {
+      if (srslte_ue_sync_get_sfidx(&ue_sync) != 0 && srslte_ue_sync_get_sfidx(&ue_sync) != 5) {
         n = srslte_ue_dl_decode(&ue_dl, data, 0, sfn*10+srslte_ue_sync_get_sfidx(&ue_sync), acks);
         //TODO: MIMO일때는 srslte_ue_dl_decode 로직이 달라짐. 반드시 다시 pdsch_ue를 참고할것.
         if (n > 0) {
@@ -924,6 +949,8 @@ void *rx_thread_func() {
           printf("n < 0\n");
         }
       }
+      pthread_mutex_unlock(&mutex);
+      usleep(1);
       /*
       if (srslte_ue_sync_get_sfidx(&ue_sync) == 0) {
         printf("CFO: %+5.12f Hz, SFO: %+3.6f Hz, SFN: %d\n",
