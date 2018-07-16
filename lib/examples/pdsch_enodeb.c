@@ -99,7 +99,7 @@ float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
 srslte_ue_dl_t ue_dl;
 srslte_ue_mib_t ue_mib;
-uint32_t sfn;
+int sfn;
 int rx_ret = -1; // -1: zerocopy_multi 실패 0: zerocopy_multi 성공
 int sf_idx;
 bool updated = false;
@@ -796,8 +796,8 @@ void *tx_thread_func() {
 
   ///
   int cur_sf_idx;
-  uint32_t cur_sfn;
-  uint32_t next_sfn = -1;
+  int cur_sfn;
+  int next_sfn = -1;
   int cur_rx_ret;
   srslte_timestamp_t cur_time;
   ///
@@ -814,7 +814,7 @@ void *tx_thread_func() {
     cur_rx_ret = rx_ret;
     memcpy(&cur_time, &last_stamp, sizeof(srslte_timestamp_t));
     pthread_mutex_unlock(&mutex);
-    //fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d\n",cur_sfn, next_sfn,cur_sf_idx);
+    fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d, time: %.f: %f s\n",cur_sfn, next_sfn,cur_sf_idx, difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
     //fprintf(stderr,"\n[Tx] sfn: %d\n",cur_sfn);
     //fprintf(stderr,"[Tx] rx_ret: %d\n",cur_rx_ret);
     //fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
@@ -833,7 +833,7 @@ void *tx_thread_func() {
         future_time.full_secs += (int) future_time.frac_secs;
         future_time.frac_secs -= (int) future_time.frac_secs;
       }
-      next_sfn = cur_sfn + (uint32_t)(time_offset*100);
+      next_sfn = cur_sfn + (int)(time_offset*100);
       next_sfn = next_sfn%1024;
 
       printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
@@ -845,9 +845,6 @@ void *tx_thread_func() {
         exit(-1);
       }
       first = false;
-    }
-    else {
-      pthread_mutex_unlock(&mutex);
     }
   }
 
@@ -930,7 +927,7 @@ void *rx_thread_func() {
       updated = true;
       pthread_cond_signal(&cond);
 
-      //fprintf(stderr,"[Rx] sfn: %d, sf_idx: %d\n",sfn,sf_idx);
+      //fprintf(stderr,"[Rx] ret: %d, sfn: %d, sf_idx: %d, time: %.f: %f s\n",rx_ret,sfn,sf_idx,difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
       //fprintf(stderr,"[Rx] rx_ret: %d\n",rx_ret);
       //fprintf(stderr,"[Rx] sf_idx: %d\n",sf_idx);
       //fprintf(stderr,"[Rx] time: %.f: %f s\n",difftime(last_stamp.full_secs, (time_t) 0),last_stamp.frac_secs);
