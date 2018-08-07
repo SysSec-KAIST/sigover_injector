@@ -845,7 +845,9 @@ void *tx_thread_func() {
       memcpy(&future_time, &cur_time, sizeof(srslte_timestamp_t));
       future_time.frac_secs += time_offset;
       //offset...
-      future_time.frac_secs -= (57.0/7680000.0);
+      future_time.frac_secs -= (57.0/7680000.0); // 7.68 오프셋
+      //future_time.frac_secs += (66.0/30720000.0); // 30.72 오프셋 srs eNodeB
+      //future_time.frac_secs += (65.0/30720000.0); // 30.72 오프셋 상용 eNodeB: KT 379 1840e6 // 65 ,64도 되는거보면..66으로 하는게 맞는듯.
       if (future_time.frac_secs >= 1.0) {
         future_time.full_secs += (int) future_time.frac_secs;
         future_time.frac_secs -= (int) future_time.frac_secs;
@@ -1244,7 +1246,7 @@ int main(int argc, char **argv) {
     //read_file(output_buffer2[0], "inject_sib_cfi_3"); //inject_sample_sf_5
     //read_file(output_buffer2[0], "cmas_padding_sf_3"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
     read_file(output_buffer2[0], "cmas_padding_sf_3"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
-    read_file(output_buffer3[0], "paging_final_12"); //sib_padding2, cmas_padding //output_buffer3[0] : Paging
+    read_file(output_buffer3[0], "paging_final"); //sib_padding2, cmas_padding //output_buffer3[0] : Paging
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
