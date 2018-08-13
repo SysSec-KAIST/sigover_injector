@@ -124,6 +124,7 @@ cf_t *sf_buffer[SRSLTE_MAX_PORTS] = {NULL}, *output_buffer [SRSLTE_MAX_PORTS] = 
 cf_t *sf_buffer_sync[SRSLTE_MAX_PORTS] = {NULL};
 cf_t *output_buffer2 [SRSLTE_MAX_PORTS] = {NULL};
 cf_t *output_buffer3 [SRSLTE_MAX_PORTS] = {NULL};
+cf_t *output_buffer_offset [SRSLTE_MAX_PORTS] = {NULL};
 
 
 int sf_n_re, sf_n_samples;
@@ -324,6 +325,14 @@ void base_init() {
     }
     bzero(output_buffer3[i], sizeof(cf_t) * sf_n_samples*3);
   }
+  for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
+    output_buffer_offset[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*3);
+    if (!output_buffer_offset[i]) {
+      perror("malloc");
+      exit(-1);
+    }
+    bzero(output_buffer_offset[i], sizeof(cf_t) * sf_n_samples*3);
+  }
 
 
   /* open file or USRP */
@@ -494,6 +503,9 @@ void base_free() {
     }
     if (output_buffer3[i]) {
       free(output_buffer3[i]);
+    }
+    if (output_buffer_offset[i]) {
+      free(output_buffer_offset[i]);
     }
   }
   if (output_file_name) {
@@ -812,6 +824,7 @@ void *tx_thread_func() {
   int next_sfn = -1;
   int cur_rx_ret;
   srslte_timestamp_t cur_time;
+  float estimated_cfo, estimated_sfo;
   ///
 
   while (!go_exit) {
@@ -830,10 +843,20 @@ void *tx_thread_func() {
     //fprintf(stderr,"\n[Tx] sfn: %d\n",cur_sfn);
     if (cur_rx_ret != 0)
       fprintf(stderr,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![Tx] rx_ret: %d\n",cur_rx_ret);
+    if (cur_rx_ret == 0 && cur_sfn >= 0 && first == true) {
+      int samp_rate = srslte_sampling_freq_hz(cell.nof_prb);
+      estimated_cfo = srslte_ue_sync_get_cfo(&ue_sync);
+      estimated_sfo = srslte_ue_sync_get_sfo(&ue_sync);
+      freq_offset_apply(output_buffer3[0], output_buffer_offset[0], sf_n_samples*3, samp_rate, (-1*estimated_cfo));
+      first = false;
+      printf("Frequency offset estimated..........%f\n",estimated_cfo);
+      continue;
+    }
     //fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
     //fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
     //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 4 || cur_sf_idx == 8) && cur_sfn%2 == 1) { // #*#*#*#*#*#*#*#*#*#*#*#*
-    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8) && (cur_sfn+1)%4 == 0) {
+    //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8) && (cur_sfn+1)%4 == 0) {
+    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8)) {
       //fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d\n",cur_sfn, next_sfn,cur_sf_idx);
       /*
       if (first == false && cur_sfn != next_sfn) {
@@ -857,7 +880,7 @@ void *tx_thread_func() {
 
       int ret = -1;
       //if (((cur_sfn+1)%1024 == 0 || cur_sfn+1 == 512) && cur_sf_idx == 2) { //output_buffer2: SIB 12
-      if (cur_sf_idx == 2) { //output_buffer2: SIB 12
+      if (cur_sf_idx == 4) { //output_buffer2: SIB 12
         printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*3) {
@@ -867,7 +890,8 @@ void *tx_thread_func() {
       }
       if (cur_sf_idx == 8) { //output_buffer3: paging
         printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
-        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        //ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer_offset, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*3) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
           exit(-1);
