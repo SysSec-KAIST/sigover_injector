@@ -310,28 +310,28 @@ void base_init() {
     bzero(output_buffer[i], sizeof(cf_t) * sf_n_samples);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
-    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*3);
+    output_buffer2[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*1.2);
     if (!output_buffer2[i]) {
       perror("malloc");
       exit(-1);
     }
-    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*3);
+    bzero(output_buffer2[i], sizeof(cf_t) * sf_n_samples*1.2);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
-    output_buffer3[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*3);
+    output_buffer3[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*1.2);
     if (!output_buffer3[i]) {
       perror("malloc");
       exit(-1);
     }
-    bzero(output_buffer3[i], sizeof(cf_t) * sf_n_samples*3);
+    bzero(output_buffer3[i], sizeof(cf_t) * sf_n_samples*1.2);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
-    output_buffer_offset[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*3);
+    output_buffer_offset[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*1.2);
     if (!output_buffer_offset[i]) {
       perror("malloc");
       exit(-1);
     }
-    bzero(output_buffer_offset[i], sizeof(cf_t) * sf_n_samples*3);
+    bzero(output_buffer_offset[i], sizeof(cf_t) * sf_n_samples*1.2);
   }
 
 
@@ -815,7 +815,7 @@ void *tx_thread_func() {
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
-  float time_offset = 0.01;
+  float time_offset = 0.01 - 0.0001;
 
 
   ///
@@ -847,7 +847,7 @@ void *tx_thread_func() {
       int samp_rate = srslte_sampling_freq_hz(cell.nof_prb);
       estimated_cfo = srslte_ue_sync_get_cfo(&ue_sync);
       estimated_sfo = srslte_ue_sync_get_sfo(&ue_sync);
-      freq_offset_apply(output_buffer3[0], output_buffer_offset[0], sf_n_samples*3, samp_rate, (-1*estimated_cfo));
+      freq_offset_apply(output_buffer3[0], output_buffer_offset[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
       first = false;
       printf("Frequency offset estimated..........%f\n",estimated_cfo);
       continue;
@@ -856,7 +856,7 @@ void *tx_thread_func() {
     //fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
     //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 4 || cur_sf_idx == 8) && cur_sfn%2 == 1) { // #*#*#*#*#*#*#*#*#*#*#*#*
     //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8) && (cur_sfn+1)%4 == 0) {
-    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8)) {
+    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 5 || cur_sf_idx == 9)) {
       //fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d\n",cur_sfn, next_sfn,cur_sf_idx);
       /*
       if (first == false && cur_sfn != next_sfn) {
@@ -868,9 +868,9 @@ void *tx_thread_func() {
       memcpy(&future_time, &cur_time, sizeof(srslte_timestamp_t));
       future_time.frac_secs += time_offset;
       //offset...
-      future_time.frac_secs -= (57.0/7680000.0); // 7.68 오프셋
-      //future_time.frac_secs += (66.0/30720000.0); // 30.72 오프셋 srs eNodeB
-      //future_time.frac_secs += (65.0/30720000.0); // 30.72 오프셋 상용 eNodeB: KT 379 1840e6 // 65 ,64도 되는거보면..66으로 하는게 맞는듯.
+      //future_time.frac_secs -= (57.0/7680000.0); // 7.68 오프셋
+      future_time.frac_secs -= (66.0/30720000.0); // 30.72 오프셋 srs eNodeB
+      //future_time.frac_secs -= (65.0/30720000.0); // 30.72 오프셋 상용 eNodeB: KT 379 1840e6 // 65 ,64도 되는거보면..66으로 하는게 맞는듯.
       if (future_time.frac_secs >= 1.0) {
         future_time.full_secs += (int) future_time.frac_secs;
         future_time.frac_secs -= (int) future_time.frac_secs;
@@ -880,20 +880,20 @@ void *tx_thread_func() {
 
       int ret = -1;
       //if (((cur_sfn+1)%1024 == 0 || cur_sfn+1 == 512) && cur_sf_idx == 2) { //output_buffer2: SIB 12
-      if (cur_sf_idx == 4) { //output_buffer2: SIB 12
-        printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
-        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
-        if (ret != sf_n_samples*3) {
-          printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+      if (cur_sf_idx == 5) { //output_buffer2: SIB 12
+        printf("[SIB][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        if (ret != sf_n_samples*1.2) {
+          printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
           exit(-1);
         }
       }
-      if (cur_sf_idx == 8) { //output_buffer3: paging
-        printf("[future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
-        //ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
-        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer_offset, sf_n_samples*3, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
-        if (ret != sf_n_samples*3) {
-          printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*10!!!!!\n");
+      if (cur_sf_idx == 9) { //output_buffer3: paging
+        printf("     [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        //ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer_offset, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        if (ret != sf_n_samples*1.2) {
+          printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
           exit(-1);
         }
       }
@@ -1269,8 +1269,8 @@ int main(int argc, char **argv) {
     //read_file(output_buffer2[0], "zadoff_only_at_subframe_2.dat");
     //read_file(output_buffer2[0], "inject_sib_cfi_3"); //inject_sample_sf_5
     //read_file(output_buffer2[0], "cmas_padding_sf_3"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
-    read_file(output_buffer2[0], "cmas_padding_sf_3"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
-    read_file(output_buffer3[0], "paging_final"); //sib_padding2, cmas_padding //output_buffer3[0] : Paging
+    read_file(output_buffer2[0], "sib_11"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
+    read_file(output_buffer3[0], "paging_11"); //sib_padding2, cmas_padding //output_buffer3[0] : Paging
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
