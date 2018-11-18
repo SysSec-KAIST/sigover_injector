@@ -124,6 +124,7 @@ cf_t *sf_buffer[SRSLTE_MAX_PORTS] = {NULL}, *output_buffer [SRSLTE_MAX_PORTS] = 
 cf_t *sf_buffer_sync[SRSLTE_MAX_PORTS] = {NULL};
 cf_t *output_buffer2 [SRSLTE_MAX_PORTS] = {NULL};
 cf_t *output_buffer3 [SRSLTE_MAX_PORTS] = {NULL};
+cf_t *output_buffer4 [SRSLTE_MAX_PORTS] = {NULL};
 cf_t *output_buffer_offset [SRSLTE_MAX_PORTS] = {NULL};
 
 
@@ -326,6 +327,14 @@ void base_init() {
     bzero(output_buffer3[i], sizeof(cf_t) * sf_n_samples*1.2);
   }
   for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
+    output_buffer4[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*1.2);
+    if (!output_buffer4[i]) {
+      perror("malloc");
+      exit(-1);
+    }
+    bzero(output_buffer4[i], sizeof(cf_t) * sf_n_samples*1.2);
+  }
+  for (i = 0; i < SRSLTE_MAX_PORTS; i++) {
     output_buffer_offset[i] = srslte_vec_malloc(sizeof(cf_t) * sf_n_samples*1.2);
     if (!output_buffer_offset[i]) {
       perror("malloc");
@@ -503,6 +512,9 @@ void base_free() {
     }
     if (output_buffer3[i]) {
       free(output_buffer3[i]);
+    }
+    if (output_buffer4[i]) {
+      free(output_buffer4[i]);
     }
     if (output_buffer_offset[i]) {
       free(output_buffer_offset[i]);
