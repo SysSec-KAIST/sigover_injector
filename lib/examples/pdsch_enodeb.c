@@ -827,6 +827,7 @@ void *tx_thread_func() {
   bool start_of_burst = true;
   bool end_of_burst = true;
   bool first = true;
+  bool paging_stop = false;
   float time_offset = 0.01 - 0.0001;
 
 
@@ -859,7 +860,9 @@ void *tx_thread_func() {
       int samp_rate = srslte_sampling_freq_hz(cell.nof_prb);
       estimated_cfo = srslte_ue_sync_get_cfo(&ue_sync);
       estimated_sfo = srslte_ue_sync_get_sfo(&ue_sync);
-      freq_offset_apply(output_buffer3[0], output_buffer_offset[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      freq_offset_apply(output_buffer3[0], output_buffer3[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      freq_offset_apply(output_buffer2[0], output_buffer2[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      freq_offset_apply(output_buffer4[0], output_buffer4[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
       first = false;
       printf("Frequency offset estimated..........%f\n",estimated_cfo);
       continue;
@@ -868,7 +871,12 @@ void *tx_thread_func() {
     //fprintf(stderr,"[Tx] time: %.f: %f s\n",difftime(cur_time.full_secs, (time_t) 0),cur_time.frac_secs);
     //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 4 || cur_sf_idx == 8) && cur_sfn%2 == 1) { // #*#*#*#*#*#*#*#*#*#*#*#*
     //if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 2 || cur_sf_idx == 8) && (cur_sfn+1)%4 == 0) {
-    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 5 || cur_sf_idx == 9)) {
+    //kkk
+    /* //FIXME : 목적: SFN = 700 부터 인젝션 시작하도록 함.
+    if (cur_rx_ret == 0 && cur_sfn <= 700)
+      continue;
+    */
+    if (cur_rx_ret == 0 && cur_sfn >= 0 && (cur_sf_idx == 1 || cur_sf_idx == 5 || cur_sf_idx == 9)) {
       //fprintf(stderr,"[Tx] sfn: %d,next_sfn: %d, sf_idx: %d\n",cur_sfn, next_sfn,cur_sf_idx);
       /*
       if (first == false && cur_sfn != next_sfn) {
@@ -882,28 +890,45 @@ void *tx_thread_func() {
       //offset...
       //future_time.frac_secs -= (57.0/7680000.0); // 7.68 오프셋
       future_time.frac_secs -= (66.0/30720000.0); // 30.72 오프셋 srs eNodeB
+      //future_time.frac_secs += (125.0/30720000.0); // 30.72 오프셋 실험용.. 280 sample delay가 맥스인듯.
       //future_time.frac_secs -= (65.0/30720000.0); // 30.72 오프셋 상용 eNodeB: KT 379 1840e6 // 65 ,64도 되는거보면..66으로 하는게 맞는듯.
       if (future_time.frac_secs >= 1.0) {
         future_time.full_secs += (int) future_time.frac_secs;
         future_time.frac_secs -= (int) future_time.frac_secs;
       }
-      next_sfn = cur_sfn + (int)(time_offset*100);
+      next_sfn = cur_sfn + 1;
       next_sfn = next_sfn%1024;
 
       int ret = -1;
       //if (((cur_sfn+1)%1024 == 0 || cur_sfn+1 == 512) && cur_sf_idx == 2) { //output_buffer2: SIB 12
-      if (cur_sf_idx == 5) { //output_buffer2: SIB 12
-        printf("[SIB][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+      if (cur_sf_idx == 55 && !paging_stop) { //output_buffer2: SIB 1
+      //if (cur_sf_idx == 5 && (next_sfn == 0 || next_sfn == 512)) { //output_buffer2: SIB 1
+        printf(" [SIB][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
           exit(-1);
         }
       }
-      if (cur_sf_idx == 9) { //output_buffer3: paging
-        printf("     [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
-        //ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
-        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer_offset, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+      //if ((cur_sfn+1)%16 == 2 && cur_sf_idx == 1) { //output_buffer4: CMAS
+      if (cur_sf_idx == 11) { //output_buffer4: CMAS
+        printf("[CMAS][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer4, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
+        if (ret != sf_n_samples*1.2) {
+          printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
+          exit(-1);
+        }
+      }
+      /* //FIXME : 목적: SFN = 0 부터는 paging 전송 안하도록 함.
+      if (next_sfn == 0) {
+        paging_stop = true;
+        printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+      }
+      */
+      //if (cur_sf_idx == 9 && !paging_stop && next_sfn%128 == 16) { //KT NANO 심의 paging SFN.
+      if (cur_sf_idx == 9 && !paging_stop) { //output_buffer3: paging
+        printf("      [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
           exit(-1);
@@ -1278,11 +1303,9 @@ int main(int argc, char **argv) {
         exit(-1);
       }
     }
-    //read_file(output_buffer2[0], "zadoff_only_at_subframe_2.dat");
-    //read_file(output_buffer2[0], "inject_sib_cfi_3"); //inject_sample_sf_5
-    //read_file(output_buffer2[0], "cmas_padding_sf_3"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
-    read_file(output_buffer2[0], "sib_11"); //sib_padding2, cmas_padding //output_buffer2[0] : SIB 12
-    read_file(output_buffer3[0], "paging_11"); //sib_padding2, cmas_padding //output_buffer3[0] : Paging
+    read_file(output_buffer2[0], "sib_379"); //subframe 5
+    read_file(output_buffer3[0], "paging_379_imsi"); // subframe 9
+    read_file(output_buffer4[0], "paging_379"); //subframe 1
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
