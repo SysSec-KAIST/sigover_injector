@@ -860,11 +860,11 @@ void *tx_thread_func() {
       int samp_rate = srslte_sampling_freq_hz(cell.nof_prb);
       estimated_cfo = srslte_ue_sync_get_cfo(&ue_sync);
       estimated_sfo = srslte_ue_sync_get_sfo(&ue_sync);
-      freq_offset_apply(output_buffer3[0], output_buffer3[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
-      freq_offset_apply(output_buffer2[0], output_buffer2[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
-      freq_offset_apply(output_buffer4[0], output_buffer4[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      //freq_offset_apply(output_buffer3[0], output_buffer3[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      //freq_offset_apply(output_buffer2[0], output_buffer2[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
+      //freq_offset_apply(output_buffer4[0], output_buffer4[0], sf_n_samples*1.2, samp_rate, (-1*estimated_cfo));
       first = false;
-      printf("Frequency offset estimated..........%f\n",estimated_cfo);
+      printf("Frequency offset estimated..........CFO: %f SFO: %f\n",estimated_cfo,estimated_sfo);
       continue;
     }
     //fprintf(stderr,"[Tx] sf_idx: %d\n",cur_sf_idx);
@@ -889,6 +889,7 @@ void *tx_thread_func() {
       future_time.frac_secs += time_offset;
       //offset...
       //future_time.frac_secs -= (57.0/7680000.0); // 7.68 오프셋
+      //future_time.frac_secs -= (60.0/15360000.0); // 15.36 commerical eNodeB: KT 379 954.3e6
       future_time.frac_secs -= (66.0/30720000.0); // 30.72 오프셋 srs eNodeB
       //future_time.frac_secs += (125.0/30720000.0); // 30.72 오프셋 실험용.. 280 sample delay가 맥스인듯.
       //future_time.frac_secs -= (65.0/30720000.0); // 30.72 오프셋 상용 eNodeB: KT 379 1840e6 // 65 ,64도 되는거보면..66으로 하는게 맞는듯.
@@ -927,7 +928,7 @@ void *tx_thread_func() {
       */
       //if (cur_sf_idx == 9 && !paging_stop && next_sfn%128 == 16) { //KT NANO 심의 paging SFN.
       if (cur_sf_idx == 9 && !paging_stop) { //output_buffer3: paging
-        printf("      [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        printf(" [Pag][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
@@ -1303,9 +1304,12 @@ int main(int argc, char **argv) {
         exit(-1);
       }
     }
-    read_file(output_buffer2[0], "sib_379"); //subframe 5
-    read_file(output_buffer3[0], "paging_379_imsi"); // subframe 9
-    read_file(output_buffer4[0], "paging_379"); //subframe 1
+    read_file(output_buffer2[0], "LG_CMAS_SIB1"); //subframe 5
+    //read_file(output_buffer3[0], "paging_LG"); // subframe 9
+    //read_file(output_buffer3[0], "IMSI_PAGING_LG_2120_PCI_10"); // subframe 9
+    read_file(output_buffer3[0], "LG_CMAS_PAGING"); // subframe 9
+    read_file(output_buffer4[0], "LG_CMAS_SIB12"); //subframe 1
+    //read_file(output_buffer4[0], "sib2_ac_barr_selective4"); //subframe 1
     
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
