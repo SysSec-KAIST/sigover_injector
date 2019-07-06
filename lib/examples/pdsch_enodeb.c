@@ -904,7 +904,7 @@ void *tx_thread_func() {
       //if (((cur_sfn+1)%1024 == 0 || cur_sfn+1 == 512) && cur_sf_idx == 2) { //output_buffer2: SIB 12
       if (cur_sf_idx == 55 && !paging_stop) { //output_buffer2: SIB 1
       //if (cur_sf_idx == 5 && (next_sfn == 0 || next_sfn == 512)) { //output_buffer2: SIB 1
-        printf(" [SIB][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        printf("[Subframe 5] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
@@ -912,8 +912,8 @@ void *tx_thread_func() {
         }
       }
       //if ((cur_sfn+1)%16 == 2 && cur_sf_idx == 1) { //output_buffer4: CMAS
-      if (cur_sf_idx == 11) { //output_buffer4: CMAS
-        printf("[CMAS][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+      if (cur_sf_idx == 1) { //output_buffer4: CMAS
+        printf("[Subframe 1] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer4, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
@@ -928,7 +928,7 @@ void *tx_thread_func() {
       */
       //if (cur_sf_idx == 9 && !paging_stop && next_sfn%128 == 16) { //KT NANO 심의 paging SFN.
       if (cur_sf_idx == 9 && !paging_stop) { //output_buffer3: paging
-        printf(" [Pag][future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
+        printf("[Subframe 9] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
           printf("[!] Warning!!!!!!!!!: txd sample is not sf_n_samples*1.2!!!!!\n");
