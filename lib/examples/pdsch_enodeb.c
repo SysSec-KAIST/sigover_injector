@@ -63,6 +63,15 @@ char *output_file_name = NULL;
 #define UP_KEY    65
 #define DOWN_KEY  66
 
+
+/* DEMO Cases */
+#define IMSI_PAGING 0
+#define CMAS 1
+#define SIG_STORM 2
+#define AC_BARRING 3 
+
+int demo_case = -1;
+
 cell_search_cfg_t cell_detect_config = {
   SRSLTE_DEFAULT_MAX_FRAMES_PBCH,
   SRSLTE_DEFAULT_MAX_FRAMES_PSS,
@@ -95,6 +104,7 @@ uint32_t multiplex_nof_layers = 1;
 
 int mbsfn_area_id = -1;
 char *rf_args = "";
+char *input_file_sf9 = "output";
 float rf_amp = 0.8, rf_gain = 15.0, rf_freq = 2400000000;
 srslte_ue_sync_t ue_sync;
 srslte_ue_dl_t ue_dl;
@@ -164,6 +174,10 @@ void usage(char *prog) {
 #else
   printf("\t   RF is disabled.\n");
 #endif
+
+  printf("\t-D Demo case [0: IMSI paging, 1: CMAS, 2: Signalling Storm(TAU), 3: AC Barring\n");
+  printf("\t-i Input file name for IMSI paging, subframe 9 [Default %s]\n", input_file_sf9);
+
   printf("\t-o output_file [Default use RF board]\n");
   printf("\t-m MCS index [Default %d]\n", mcs_idx);
   printf("\t-n number of frames [Default %d]\n", nof_frames);
@@ -181,9 +195,23 @@ void usage(char *prog) {
 
 void parse_args(int argc, char **argv) {
   int opt;
-  while ((opt = getopt(argc, argv, "aglfmoncpvutxbwM")) != -1) {
+  while ((opt = getopt(argc, argv, "DiaglfmoncpvutxbwM")) != -1) {
 
     switch (opt) {
+    case 'D':
+      demo_case = atoi(argv[optind]);
+      if (demo_case == IMSI_PAGING)
+          printf("Current Demo: IMSI paging\n");
+      else if(demo_case == CMAS)
+          printf("Current Demo: CMAS\n");
+      else if (demo_case == SIG_STORM)
+          printf("Current Demo: signalling storm\n");
+      else if (demo_case == AC_BARRING)
+          printf("Current Demo: Access barring\n");
+      break;
+    case 'i':
+      input_file_sf9 = argv[optind];
+      break;
     case 'a':
       rf_args = argv[optind];
       break;
@@ -902,7 +930,8 @@ void *tx_thread_func() {
 
       int ret = -1;
       //if (((cur_sfn+1)%1024 == 0 || cur_sfn+1 == 512) && cur_sf_idx == 2) { //output_buffer2: SIB 12
-      if (cur_sf_idx == 55 && !paging_stop) { //output_buffer2: SIB 1
+      if (cur_sf_idx == 5  && !paging_stop && 
+	  ((demo_case == CMAS) || (demo_case == SIG_STORM)) ) { //output_buffer2: SIB 1
       //if (cur_sf_idx == 5 && (next_sfn == 0 || next_sfn == 512)) { //output_buffer2: SIB 1
         printf("[Subframe 5] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer2, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
@@ -912,7 +941,8 @@ void *tx_thread_func() {
         }
       }
       //if ((cur_sfn+1)%16 == 2 && cur_sf_idx == 1) { //output_buffer4: CMAS
-      if (cur_sf_idx == 1) { //output_buffer4: CMAS
+      if (cur_sf_idx == 1 && 
+	  ((demo_case == CMAS) || (demo_case == AC_BARRING)) ) { //output_buffer4: CMAS
         printf("[Subframe 1] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer4, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
@@ -927,7 +957,7 @@ void *tx_thread_func() {
       }
       */
       //if (cur_sf_idx == 9 && !paging_stop && next_sfn%128 == 16) { //KT NANO 심의 paging SFN.
-      if (cur_sf_idx == 9 && !paging_stop) { //output_buffer3: paging
+      if (cur_sf_idx == 9 && !paging_stop && (demo_case != -1)) { //output_buffer3: paging
         printf("[Subframe 9] [future_time] next_sfn: %d %.f: %f s\n",next_sfn, difftime(future_time.full_secs, (time_t) 0),future_time.frac_secs);
         ret = srslte_rf_send_timed_multi(&rf, (void**) output_buffer3, sf_n_samples*1.2, future_time.full_secs, future_time.frac_secs, true, start_of_burst, end_of_burst);
         if (ret != sf_n_samples*1.2) {
@@ -1173,7 +1203,7 @@ int main(int argc, char **argv) {
     printf("Set TX freq: %.2f MHz\n", srslte_rf_set_tx_freq(&rf, rf_freq) / 1000000);
     // ******************** MODIFIED START *************************************
     printf("Set RX freq: %.2f MHz\n", srslte_rf_set_rx_freq(&rf, rf_freq) / 1000000);
-    srslte_rf_set_rx_gain(&rf, 15);
+    srslte_rf_set_rx_gain(&rf, 25);
     bool locked = srslte_rf_rx_wait_lo_locked(&rf);
     printf("[1] %s\n",locked ? "locked" : "Not locked");
 
@@ -1304,13 +1334,59 @@ int main(int argc, char **argv) {
         exit(-1);
       }
     }
-    read_file(output_buffer2[0], "LG_CMAS_SIB1"); //subframe 5
-    //read_file(output_buffer3[0], "paging_LG"); // subframe 9
-    //read_file(output_buffer3[0], "IMSI_PAGING_LG_2120_PCI_10"); // subframe 9
-    read_file(output_buffer3[0], "LG_CMAS_PAGING"); // subframe 9
-    read_file(output_buffer4[0], "LG_CMAS_SIB12"); //subframe 1
-    //read_file(output_buffer4[0], "sib2_ac_barr_selective4"); //subframe 1
     
+
+    if (demo_case == IMSI_PAGING) {
+      //read_file(output_buffer3[0], "LG_IMSI_NANO_PAGING"); // subframe 9
+      read_file(output_buffer3[0], input_file_sf9); // subframe 9
+
+    }
+    /*
+    else if (demo_case == CMAS) {
+      read_file(output_buffer2[0], "LG_CMAS_SIB1_MC"); //subframe 5
+      read_file(output_buffer3[0], "LG_CMAS_PAGING_MC"); // subframe 9
+      //read_file(output_buffer4[0], "LG_CMAS_SIB12_HI"); //subframe 1
+      //read_file(output_buffer4[0], "LG_CMAS_SIB12_2"); //subframe 1
+      //read_file(output_buffer4[0], "LG_CMAS_SIB12_3"); //subframe 1
+      read_file(output_buffer4[0], "LG_CMAS_SIB12_MC3"); //subframe 1
+    }
+    else if (demo_case == SIG_STORM) {
+      read_file(output_buffer2[0], "LG_SIB_TAU"); //subframe 5
+      read_file(output_buffer3[0], "LG_SYS_MODI_PAGING"); // subframe 9
+    }
+    else if (demo_case == AC_BARRING) {
+      read_file(output_buffer3[0], "LG_SYS_MODI_PAGING"); // subframe 9
+      read_file(output_buffer4[0], "LG_BARRING_SIB2_HI"); //subframe 1
+    }
+    */
+    else {
+      printf ("Un-supported Case!\n");
+    }
+    //read_file(output_buffer2[0], "LG_SIB_TAU"); //subframe 5
+   // read_file(output_buffer3[0], "LG_SYS_MODI_PAGING"); // subframe 9
+
+
+
+    // TAU
+    //read_file(output_buffer2[0], "LG_SIB_TAU"); //subframe 5
+    //read_file(output_buffer3[0], "LG_SYS_MODI_PAGING"); // subframe 9
+
+    
+    //read_file(output_buffer2[0], "LG_CMAS_SIB1_SW"); //subframe 5
+   // read_file(output_buffer3[0], "LG_CMAS_PAGING_SW"); // subframe 9
+    // read_file(output_buffer3[0], "IMSI_PAGING_LG_2120_PCI_10"); // subframe 9
+    
+     //read_file(output_buffer3[0], "LG_IMSI_NANO_PAGING"); // subframe 9
+ 
+    //read_file(output_buffer3[0], "LG_SYS_MODI_PAGING"); // subframe 9
+    //read_file(output_buffer4[0], "LG_CMAS_SIB12_SW"); //subframe 1
+    //read_file(output_buffer4[0], "LG_BARRING_SIB2_HI"); //subframe 1
+
+    // CMAS HI
+    //read_file(output_buffer2[0], "LG_CMAS_SIB1_HI"); //subframe 5
+    //read_file(output_buffer3[0], "LG_CMAS_PAGING_HI"); // subframe 9
+    //read_file(output_buffer4[0], "LG_CMAS_SIB12_HI"); //subframe 1
+
     //if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
     if (srslte_ue_mib_init(&ue_mib, sf_buffer_sync, cell.nof_prb)) {
       fprintf(stderr, "Error initaiting UE MIB decoder\n");
