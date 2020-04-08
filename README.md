@@ -204,6 +204,33 @@ the default SGi IP address:
 ping 172.16.0.1
 ```
 
+INJECTOR
+========
+
+```
+mkdir build
+cd build
+cmake ..
+make
+
+cd lib/examples
+cp {where the file "output" from sigover_gen_sample is located}/output .
+
+sudo ./pdsch_enodeb -f @1 -a @2 -p @3 -g @4 -D @5 -i @6
+@1: TX frequency (target cell's DL frequency)
+@2: SDR option
+@3: number of prb
+@4: TX gain
+@5: Attack mode. sigover_gen_sample generates IMSI paging message. 0 is for IMSI paging.
+@6: Input file name. Default is "output"
+
+(example)
+sudo ./pdsch_enodeb -f 2120e6 -a clock=gpsdo,type=x300 -p 100 -g 30 -D 0 -i "output"
+
+```
+
+
+
 Support
 ========
 
