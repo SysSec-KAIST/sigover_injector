@@ -235,7 +235,7 @@ make
 **Executing**
 ```
 cd lib/examples
-cp {where the file "output" from sigover_gen_sample is located}/output .
+cp {where the file "output" from sigover_gen_sample is located, e.g. */sigover_gen_sample/build}/output .
 
 sudo ./pdsch_enodeb -f @1 -a @2 -p @3 -g @4 -D @5 -i @6
 @1: TX frequency (target cell's DL frequency)
