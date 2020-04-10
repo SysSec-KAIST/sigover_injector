@@ -203,16 +203,37 @@ the default SGi IP address:
 ```
 ping 172.16.0.1
 ```
+SigOver manual Common
+========
+**Prerequisite**
+ - Configuration of target eNB. (e.g. by using pdsch_ue of srsLTE)
+ - USRP X310 with GPSDO (TCXO or LCXO), (+It’s better to have GPS antenna)
+ - Ubuntu 16.04 PC that can execute the srsLTE
+
+**Overall Procedure**
+1. Repository “GEN SAMPLE” is for building a subframe with an IMSI paging message.
+2. Get configuration of target eNB which the victim UE is connected to. (PHICH Length, PHICH Resources, cyclic prefix, transmission mode, number of ports, number of PRB, PCI)
+3. Go to the “lib/test/common/gen_sample.cc” and change cell configurations on with target eNB’s. 
+4. Build the project. 
+5. Using build/lib/test/common/gen_sample on “GEN SAMPLE”, you can get a file named “output.” 
+6. Repository “LTE Injector” is for injecting an IMSI paging message at specific timing and frequency.
+7. Build the project.
+8. Copy “output” file to sigover_injector/build/lib/examples
+9. Using build/lib/examples/pdsch_enodeb, you can inject the IMSI paging message on the air. 
 
 INJECTOR
 ========
 
+**Building**
 ```
 mkdir build
 cd build
 cmake ..
 make
+```
 
+**Executing**
+```
 cd lib/examples
 cp {where the file "output" from sigover_gen_sample is located}/output .
 
@@ -228,7 +249,6 @@ sudo ./pdsch_enodeb -f @1 -a @2 -p @3 -g @4 -D @5 -i @6
 sudo ./pdsch_enodeb -f 2120e6 -a clock=gpsdo,type=x300 -p 100 -g 30 -D 0 -i "output"
 
 ```
-
 
 
 Support
