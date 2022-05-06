@@ -7,12 +7,16 @@ SigOver (signal overshadowing attack) exploits the fundamental weakness of broad
 SigOver is a signal injection attack that exploits the fundamental weakness of physical layer in Long-Term Evolution (LTE). 
 Since LTE communication is based on an open medium, a legitimate signal can potentially be counterfeited by a malicious signal. In addition, although most LTE signaling messages are protected from modification using cryptographic primitives, broadcast messages in LTE have never been integrity protected. 
 
-![overview](./img/sigover.png)
+<p align="center">
+<img src="./img/sigover.png" width="491" height="295">
+ </p>
 
 This attack has several advantages and differences when compared with existing attacks using a fake base station. For example, with a 3 dB power difference from a legitimate signal, the SigOver demonstrated a 98% success rate when compared with the 80% success rate of attacks achieved using a fake base station, even with a 35 dB power difference. Given that the SigOver is a novel primitive attack, it yields five new attack scenarios and implications. 
 
-![advantages](./img/Advantages.png)
-
+<p align="center">
+<img src="./img/Advantages.png" width="593" height="348">
+ </p>
+ 
 Please refer to [our
 paper](https://syssec.kaist.ac.kr/pub/2019/sec19-yang-hojoon.pdf) for more details. 
 If you are also interested in overshadowing unicast messages in LTE, please refer to our [36C3 talk](https://media.ccc.de/v/36c3-10801-sigover_alpha). 
