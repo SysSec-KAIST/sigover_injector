@@ -3,6 +3,12 @@ Description
 
 SigOver (signal overshadowing attack) exploits the fundamental weakness of broadcast messages in LTE and modifies a transmitted signal over the air. By using this tool, you can inject a manipulated broadcast signal into UEs without employing an FBS. 
 
+**Use responsively**
+>Overshadowing a LTE signal on licensed frequencies might be illegal in your country.
+(Each country has unique regulations regarding the wireless transmission of signals and these regulations are drafted, implemented, and modified by each country's government, not by an international organization.)
+>
+>Also, it may affect other users not to receive legitimate signals. 
+
 ## What SigOver?
 SigOver is a signal injection attack that exploits the fundamental weakness of physical layer in Long-Term Evolution (LTE). 
 Since LTE communication is based on an open medium, a legitimate signal can potentially be counterfeited by a malicious signal. In addition, although most LTE signaling messages are protected from modification using cryptographic primitives, broadcast messages in LTE have never been integrity protected. 
