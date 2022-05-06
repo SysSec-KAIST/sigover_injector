@@ -77,7 +77,7 @@ sudo ./pdsch_enodeb -f 2120e6 -a clock=gpsdo,type=x300 -p 100 -g 30 -D 0 -i "out
 ```
 
 # Credits
-We sincerely appreciate the [SRS team](https://www.srs.io) for making a their great software available :)
+We sincerely appreciate the [SRS team](https://www.srs.io) for making their great software available :)
 
 
 # BibTex
