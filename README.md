@@ -11,7 +11,7 @@ Since LTE communication is based on an open medium, a legitimate signal can pote
 
 This attack has several advantages and differences when compared with existing attacks using a fake base station. For example, with a 3 dB power difference from a legitimate signal, the SigOver demonstrated a 98% success rate when compared with the 80% success rate of attacks achieved using a fake base station, even with a 35 dB power difference. Given that the SigOver is a novel primitive attack, it yields five new attack scenarios and implications. 
 
-![Advantages](./img/advangages.png)
+![advantages](./img/Advantages.png)
 
 Please refer to [our
 paper](https://syssec.kaist.ac.kr/pub/2019/sec19-yang-hojoon.pdf) for more details. 
