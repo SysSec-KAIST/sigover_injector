@@ -9,7 +9,7 @@ SigOver (signal overshadowing attack) exploits the fundamental weakness of broad
 >
 >Also, it may affect other users not to receive legitimate signals. 
 
-## What SigOver?
+## What is SigOver?
 SigOver is a signal injection attack that exploits the fundamental weakness of physical layer in Long-Term Evolution (LTE). 
 Since LTE communication is based on an open medium, a legitimate signal can potentially be counterfeited by a malicious signal. In addition, although most LTE signaling messages are protected from modification using cryptographic primitives, broadcast messages in LTE have never been integrity protected. 
 
@@ -27,6 +27,17 @@ Please refer to [our
 paper](https://syssec.kaist.ac.kr/pub/2019/sec19-yang-hojoon.pdf) for more details. 
 If you are also interested in overshadowing unicast messages in LTE, please refer to our [36C3 talk](https://media.ccc.de/v/36c3-10801-sigover_alpha). 
 
+## Injecting unicast message? 
+
+You have to use a C-RNTI instead of the P-RNTI (when crafting the DCI message for the UE-specific space of the PDCCH). 
+
+Also, you need to use other DCI formats (e.g. DCI Format 2A) according to the transmission mode.
+Using DCI Format 1A is only enough for the broadcast messages, which are transferred using a common search space in PDCCH. 
+
+The transmission mode is informed through RRC Connection Setup and RRC Connection Reconfiguration message, and it varies according to the configuration of the base station. 
+
+In addition, if you want to inject a MAC CE message, you don't have to care about the sequence numbers. 
+However, you might have to consider the sequence numbers for messages on the higher layer. 
 
 SigOver Manual Common
 ========
